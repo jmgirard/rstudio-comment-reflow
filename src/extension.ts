@@ -70,11 +70,23 @@ function reflowComment(editor: vscode.TextEditor) {
         }
     }
 
-    // Find the complete comment block
-    while (startLine > 0 && isCommentLine(document.lineAt(startLine - 1).text, document.languageId)) {
+    // Determine the specific class of comment we are starting on
+    const targetClass = getCommentClass(document.lineAt(startLine).text, document.languageId);
+
+    // Find the complete comment block, stopping if the comment class changes
+    while (startLine > 0) {
+        const prevLineText = document.lineAt(startLine - 1).text;
+        if (!isCommentLine(prevLineText, document.languageId) || getCommentClass(prevLineText, document.languageId) !== targetClass) {
+            break;
+        }
         startLine--;
     }
-    while (endLine < document.lineCount - 1 && isCommentLine(document.lineAt(endLine + 1).text, document.languageId)) {
+    
+    while (endLine < document.lineCount - 1) {
+        const nextLineText = document.lineAt(endLine + 1).text;
+        if (!isCommentLine(nextLineText, document.languageId) || getCommentClass(nextLineText, document.languageId) !== targetClass) {
+            break;
+        }
         endLine++;
     }
 
@@ -352,8 +364,8 @@ function reflowCommentBlock(block: CommentBlock, maxWidth: number): string {
             continue;
         }
 
-        // Handle bullet points and numbered lists
-        const isListItem = line.match(/^\s*([-*]|\d+\.)\s/);
+        // Handle bullet points, numbered lists, and Roxygen \item
+        const isListItem = line.match(/^\s*([-*]|\d+\.|\\item)\s/);
         
         if (isListItem) {
             if (!inList && currentParagraph.length > 0) {
@@ -413,7 +425,7 @@ function formatParagraph(paragraph: string[], block: CommentBlock, maxWidth: num
     } else if (isList && paragraph.length > 0) {
         const firstLine = paragraph[0];
         // Match leading space, the marker, and trailing spaces
-        const listMatch = firstLine.match(/^(\s*)([-*]|\d+\.)\s+/);
+        const listMatch = firstLine.match(/^(\s*)([-*]|\d+\.|\\item)\s+/);
         
         if (listMatch) {
             const leadingSpace = listMatch[1];
@@ -467,6 +479,20 @@ function formatParagraph(paragraph: string[], block: CommentBlock, maxWidth: num
     return lines
         .map(line => `${block.originalIndentation}${block.prefix}${line}`.trimEnd())
         .join('\n');
+}
+
+/**
+ * Identifies the specific class of a comment to prevent merging different types
+ */
+function getCommentClass(line: string, languageId: string): string {
+    const trimmed = line.trim();
+    if (languageId === 'r') {
+        return trimmed.startsWith("#'") ? 'roxygen' : 'r_standard';
+    }
+    if (languageId === 'typescript' || languageId === 'javascript') {
+        return trimmed.startsWith('//') ? 'slash' : 'star';
+    }
+    return 'standard';
 }
 
 /**
