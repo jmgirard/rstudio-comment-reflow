@@ -260,13 +260,19 @@ function reflowCommentBlock(block: CommentBlock, maxWidth: number): string {
     for (const line of block.content) {
         const trimmedLine = line.trim();
 
-        // Handle empty lines - they separate paragraphs
-        if (trimmedLine.length === 0) {
+        // Handle empty lines or standalone closing braces - they separate paragraphs
+        if (trimmedLine.length === 0 || trimmedLine === '}') {
             if (currentParagraph.length > 0) {
                 result += formatParagraph(currentParagraph, block, actualMaxWidth, inList, isRoxygenTag) + '\n';
                 currentParagraph = [];
             }
-            result += (block.originalIndentation + block.prefix).trimEnd() + '\n';
+            
+            if (trimmedLine === '}') {
+                result += (block.originalIndentation + block.prefix + line).trimEnd() + '\n';
+            } else {
+                result += (block.originalIndentation + block.prefix).trimEnd() + '\n';
+            }
+            
             inList = false;
             isRoxygenTag = false;
             lastRoxygenTag = '';
@@ -306,7 +312,11 @@ function reflowCommentBlock(block: CommentBlock, maxWidth: number): string {
         // Track macro depth only when not inside `@examples`
         if (!inExamples) {
             const previousMacroDepth = macroDepth;
-            const braces = line.match(/\{|\}/g);
+            
+            // Mask out block-level Roxygen environments so they don't trigger macro protection
+            const sanitizedLine = line.replace(/\\(?:itemize|enumerate|describe)\s*\{/g, '');
+            const braces = sanitizedLine.match(/\{|\}/g);
+            
             if (braces) {
                 for (const brace of braces) {
                     if (brace === '{') macroDepth++;
